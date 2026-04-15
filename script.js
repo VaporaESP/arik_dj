@@ -1,392 +1,146 @@
 /**
- * ARIK PRODUCIENDO — script.js
- * Senior Creative Frontend
+ * ARIK DJ — script.js
+ * Diseño: "Underground Luxury"
  *
- * Secciones:
- *  0. Init & helpers
- *  1. Loader
- *  2. Custom cursor
- *  3. Nav scroll behavior
- *  4. Mobile menu
- *  5. Hero entrance (GSAP timeline)
- *  6. Scroll reveals (GSAP ScrollTrigger)
- *  7. Stat counters
- *  8. Waveform generator
- *  9. Video cards (YouTube embed on click)
- * 10. Contact canvas particles
- * 11. Contact form tabs + submit
- * 12. Magnetic button effect
- * 13. Reduce-motion fallback
+ * Módulos:
+ *  00. Configuración y utilidades
+ *  01. Loader
+ *  02. Cursor personalizado
+ *  03. Canvas hero (visualización generativa)
+ *  04. Navegación (scroll + burger + active links)
+ *  05. Entrada del hero (GSAP timeline)
+ *  06. Reveals con scroll (GSAP ScrollTrigger)
+ *  07. Contadores animados (stats)
+ *  08. Music tabs
+ *  09. Form tabs + lógica del formulario
+ *  10. Portfolio / hover de tarjetas
+ *  11. Efecto "magnetic" en botones
+ *  12. BACKEND — cómo conectar (Supabase / Firebase / API propia)
  */
 
 'use strict';
 
-/* ═══════════════════════════════════════════
-   0. Init & helpers
-   ═══════════════════════════════════════════ */
+/* ════════════════════════════════════════════════
+   00. CONFIGURACIÓN Y UTILIDADES
+   ════════════════════════════════════════════════ */
 
 const $ = (sel, ctx = document) => ctx.querySelector(sel);
 const $$ = (sel, ctx = document) => [...ctx.querySelectorAll(sel)];
 
-// Detectar si el usuario prefiere movimiento reducido
-const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+// ¿El usuario prefiere reducción de movimiento?
+const noMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-// Detectar touch (cursor solo en non-touch)
-const isTouch = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
+// ¿Dispositivo táctil?
+const isTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
 
-/* ═══════════════════════════════════════════
-   1. Loader
-   ═══════════════════════════════════════════ */
+// Registrar GSAP + ScrollTrigger (cargados desde CDN en el HTML)
+if (window.gsap && window.ScrollTrigger) {
+  gsap.registerPlugin(ScrollTrigger);
+}
+
+
+/* ════════════════════════════════════════════════
+   01. LOADER
+   Animación de entrada: barra de progreso + fade out
+   ════════════════════════════════════════════════ */
+
 function initLoader() {
-  const loader   = $('#loader');
-  const loaderName = $('.loader-name');
+  const loader = $('#loader');
   if (!loader) return;
-
-  // Aparecer nombre
-  gsap.to(loaderName, {
-    opacity: 1,
-    y: 0,
-    duration: 0.5,
-    ease: 'power2.out',
-    delay: 0.2
-  });
-
-  // Ocultar loader y arrancar la web
-  gsap.to(loader, {
-    opacity: 0,
-    duration: 0.5,
-    ease: 'power2.in',
-    delay: 1.1,
-    onComplete: () => {
-      loader.style.display = 'none';
-      document.body.style.overflow = '';
-      initHeroEntrance();
-    }
-  });
 
   // Bloquear scroll mientras carga
   document.body.style.overflow = 'hidden';
+
+  // Esperar a que las fuentes estén listas + tiempo mínimo de branding
+  const minDelay = 1200; // ms mínimos mostrando la pantalla de carga
+  const start = Date.now();
+
+  function hideLoader() {
+    const elapsed = Date.now() - start;
+    const remaining = Math.max(0, minDelay - elapsed);
+
+    setTimeout(() => {
+      loader.classList.add('done');
+      document.body.style.overflow = '';
+      initHeroEntrance(); // lanzar la animación de entrada del hero
+    }, remaining);
+  }
+
+  // Intentar document.fonts.ready, con fallback
+  if (document.fonts && document.fonts.ready) {
+    document.fonts.ready.then(hideLoader);
+  } else {
+    setTimeout(hideLoader, minDelay);
+  }
 }
 
-/* ═══════════════════════════════════════════
-   2. Custom cursor (solo desktop)
-   ═══════════════════════════════════════════ */
+
+/* ════════════════════════════════════════════════
+   02. CURSOR PERSONALIZADO
+   Solo activo en desktop (no touch).
+   Cursor grande: lerp suavizado.
+   Punto: sigue directo.
+   ════════════════════════════════════════════════ */
+
 function initCursor() {
   if (isTouch) return;
 
-  const cursor    = $('#cursor');
-  const cursorDot = $('#cursor-dot');
-  if (!cursor || !cursorDot) return;
+  const cursor = $('#cursor');
+  const trail  = $('#cursorTrail');
+  if (!cursor || !trail) return;
 
-  let mx = 0, my = 0; // posición real del ratón
-  let cx = 0, cy = 0; // posición suavizada del cursor grande
+  let mx = 0, my = 0;   // posición real del ratón
+  let cx = 0, cy = 0;   // posición suavizada del cursor grande
 
   document.addEventListener('mousemove', (e) => {
     mx = e.clientX;
     my = e.clientY;
 
-    // Dot sigue inmediatamente
-    gsap.set(cursorDot, { x: mx, y: my });
+    // El punto sigue inmediatamente
+    if (window.gsap) {
+      gsap.set(trail, { x: mx, y: my });
+    } else {
+      trail.style.transform = `translate(${mx}px, ${my}px) translate(-50%, -50%)`;
+    }
 
-    document.body.classList.add('cursor-ready');
+    document.body.classList.add('c-ready');
   });
 
-  // Cursor grande con lag (lerp manual via ticker)
-  gsap.ticker.add(() => {
-    cx += (mx - cx) * 0.12;
-    cy += (my - cy) * 0.12;
-    gsap.set(cursor, { x: cx, y: cy });
-  });
+  // El cursor grande usa lerp via GSAP ticker
+  if (window.gsap) {
+    gsap.ticker.add(() => {
+      cx += (mx - cx) * 0.1;
+      cy += (my - cy) * 0.1;
+      gsap.set(cursor, { x: cx, y: cy });
+    });
+  }
 
-  // Hover en elementos interactivos
-  $$('a, button, [data-magnetic], .show-card, .video-card, .contact-option').forEach(el => {
-    el.addEventListener('mouseenter', () => document.body.classList.add('cursor-hover'));
-    el.addEventListener('mouseleave', () => document.body.classList.remove('cursor-hover'));
+  // Hover en interactivos
+  $$('a, button, [data-hover], .pf-card, .set-thumb, .tl-item, .service-card').forEach(el => {
+    el.addEventListener('mouseenter', () => document.body.classList.add('c-hover'));
+    el.addEventListener('mouseleave', () => document.body.classList.remove('c-hover'));
   });
 
   // Click feedback
-  document.addEventListener('mousedown', () => document.body.classList.add('cursor-click'));
-  document.addEventListener('mouseup',   () => document.body.classList.remove('cursor-click'));
+  document.addEventListener('mousedown', () => document.body.classList.add('c-click'));
+  document.addEventListener('mouseup',   () => document.body.classList.remove('c-click'));
 }
 
-/* ═══════════════════════════════════════════
-   3. Nav — scroll behavior
-   ═══════════════════════════════════════════ */
-function initNav() {
-  const nav = $('#nav');
-  if (!nav) return;
 
-  ScrollTrigger.create({
-    start: '80px top',
-    onEnter:     () => nav.classList.add('scrolled'),
-    onLeaveBack: () => nav.classList.remove('scrolled'),
-  });
+/* ════════════════════════════════════════════════
+   03. CANVAS HERO — visualización generativa
+   Partículas que reaccionan a movimiento del ratón.
+   Se muestra como fondo del hero hasta que haya vídeo.
+   ════════════════════════════════════════════════ */
 
-  // Active link highlight
-  $$('#nav .nav-link').forEach(link => {
-    const target = $(link.getAttribute('href'));
-    if (!target) return;
-    ScrollTrigger.create({
-      trigger: target,
-      start: 'top 60%',
-      end: 'bottom 60%',
-      onEnter:      () => link.style.color = 'var(--text)',
-      onLeave:      () => link.style.color = '',
-      onEnterBack:  () => link.style.color = 'var(--text)',
-      onLeaveBack:  () => link.style.color = '',
-    });
-  });
-}
+function initHeroCanvas() {
+  const canvas = $('#heroCanvas');
+  if (!canvas) return;
 
-/* ═══════════════════════════════════════════
-   4. Mobile menu
-   ═══════════════════════════════════════════ */
-function initMobileMenu() {
-  const burger = $('.nav-burger');
-  const menu   = $('#mobileMenu');
-  const links  = $$('.mm-link', menu);
-  if (!burger || !menu) return;
-
-  let open = false;
-
-  function toggleMenu(state) {
-    open = state ?? !open;
-    burger.setAttribute('aria-expanded', String(open));
-    menu.setAttribute('aria-hidden', String(!open));
-    menu.classList.toggle('open', open);
-    document.body.style.overflow = open ? 'hidden' : '';
-  }
-
-  burger.addEventListener('click', () => toggleMenu());
-  links.forEach(link => link.addEventListener('click', () => toggleMenu(false)));
-}
-
-/* ═══════════════════════════════════════════
-   5. Hero entrance — GSAP timeline
-   (se llama después del loader)
-   ═══════════════════════════════════════════ */
-function initHeroEntrance() {
-  if (prefersReducedMotion) {
-    // Sin animaciones: mostrar todo inmediatamente
-    $$('.hero-label, .hero-title, .hero-sub, .hero-cta-wrap, .hero-scroll').forEach(el => {
-      el.style.opacity = '1';
-      el.style.transform = 'none';
-    });
-    return;
-  }
-
-  const tl = gsap.timeline({ defaults: { ease: 'power3.out' } });
-
-  tl
-    .fromTo('.hero-label', { y: 20, opacity: 0 }, { y: 0, opacity: 1, duration: 0.7 })
-    .fromTo('.hero-title',
-      { y: 60, opacity: 0, skewY: 3 },
-      { y: 0, opacity: 1, skewY: 0, duration: 0.9 },
-      '-=0.4'
-    )
-    .fromTo('.hero-sub',
-      { y: 20, opacity: 0 },
-      { y: 0, opacity: 1, duration: 0.6 },
-      '-=0.5'
-    )
-    .fromTo('.hero-cta-wrap',
-      { y: 16, opacity: 0 },
-      { y: 0, opacity: 1, duration: 0.6 },
-      '-=0.4'
-    )
-    .fromTo('.hero-scroll',
-      { opacity: 0 },
-      { opacity: 1, duration: 0.5 },
-      '-=0.2'
-    );
-}
-
-/* ═══════════════════════════════════════════
-   6. Scroll reveals — GSAP ScrollTrigger
-   ═══════════════════════════════════════════ */
-function initScrollReveals() {
-  if (!window.ScrollTrigger) return;
-  gsap.registerPlugin(ScrollTrigger);
-
-  if (prefersReducedMotion) {
-    $$('[data-reveal]').forEach(el => {
-      el.style.opacity = '1';
-      el.style.transform = 'none';
-    });
-    return;
-  }
-
-  // Reveal genérico
-  $$('[data-reveal]').forEach(el => {
-    const delay  = parseFloat(el.dataset.delay || 0);
-    const dir    = el.dataset.reveal;
-
-    const fromVars = { opacity: 0, duration: 0.75, ease: 'power2.out', delay };
-
-    if (dir === 'left')  fromVars.x = -32;
-    else if (dir === 'right') fromVars.x = 32;
-    else fromVars.y = 28;
-
-    const toVars = { opacity: 1, x: 0, y: 0, duration: 0.75, ease: 'power2.out', delay };
-
-    gsap.fromTo(el,
-      { opacity: 0, x: dir === 'left' ? -32 : dir === 'right' ? 32 : 0, y: (!dir || dir === '') ? 28 : 0 },
-      {
-        ...toVars,
-        scrollTrigger: {
-          trigger: el,
-          start: 'top 85%',
-          once: true,
-        }
-      }
-    );
-  });
-
-  // Show cards — stagger
-  const showCards = $$('.show-card');
-  if (showCards.length) {
-    gsap.fromTo(showCards,
-      { opacity: 0, y: 24 },
-      {
-        opacity: 1, y: 0,
-        stagger: 0.08,
-        duration: 0.6,
-        ease: 'power2.out',
-        scrollTrigger: {
-          trigger: '.shows-grid',
-          start: 'top 80%',
-          once: true,
-        }
-      }
-    );
-  }
-
-  // Parallax sutil en el hero-video (solo si existe)
-  const heroBg = $('#heroBg');
-  if (heroBg) {
-    gsap.to(heroBg, {
-      yPercent: 20,
-      ease: 'none',
-      scrollTrigger: {
-        trigger: '#hero',
-        start: 'top top',
-        end: 'bottom top',
-        scrub: true,
-      }
-    });
-  }
-
-  // Waveform react-to-scroll
-  ScrollTrigger.create({
-    trigger: '#waveform',
-    start: 'top 80%',
-    onEnter: () => startWaveform(),
-  });
-}
-
-/* ═══════════════════════════════════════════
-   7. Stat counters
-   ═══════════════════════════════════════════ */
-function initCounters() {
-  $$('.stat[data-count]').forEach(stat => {
-    const target  = parseInt(stat.dataset.count, 10);
-    const numEl   = $('.stat-num', stat);
-    if (!numEl) return;
-
-    ScrollTrigger.create({
-      trigger: stat,
-      start: 'top 85%',
-      once: true,
-      onEnter: () => {
-        if (prefersReducedMotion) { numEl.textContent = target; return; }
-        gsap.to({ val: 0 }, {
-          val: target,
-          duration: 1.6,
-          ease: 'power2.out',
-          onUpdate: function() {
-            numEl.textContent = Math.round(this.targets()[0].val);
-          }
-        });
-      }
-    });
-  });
-}
-
-/* ═══════════════════════════════════════════
-   8. Waveform generator + animation
-   ═══════════════════════════════════════════ */
-function buildWaveform() {
-  const container = $('#waveform');
-  if (!container) return;
-
-  const BAR_COUNT = 48;
-  // Crear barras con alturas aleatorias
-  for (let i = 0; i < BAR_COUNT; i++) {
-    const bar = document.createElement('div');
-    bar.className = 'wave-bar';
-    const h = Math.random() * 70 + 15; // 15%–85%
-    const dur = (Math.random() * 0.8 + 0.4).toFixed(2); // 0.4s–1.2s
-    bar.style.cssText = `
-      height: ${h}%;
-      animation-duration: ${dur}s;
-      animation-delay: ${(Math.random() * 0.5).toFixed(2)}s;
-      opacity: ${(Math.random() * 0.5 + 0.4).toFixed(2)};
-    `;
-    container.appendChild(bar);
-  }
-}
-
-function startWaveform() {
-  // Activar la animación en las barras
-  $$('.wave-bar').forEach(bar => {
-    bar.style.animationPlayState = 'running';
-  });
-}
-
-// Parar por defecto (se activan al entrar en viewport)
-function pauseWaveform() {
-  $$('.wave-bar').forEach(bar => {
-    bar.style.animationPlayState = 'paused';
-  });
-}
-
-/* ═══════════════════════════════════════════
-   9. Video cards — YouTube embed al hacer click
-   ═══════════════════════════════════════════ */
-function initVideoCards() {
-  $$('.video-thumb[data-yt-id]').forEach(thumb => {
-    const ytId = thumb.dataset.ytId;
-    const btn  = $('.video-play-btn', thumb);
-    if (!btn || !ytId || ytId.startsWith('VIDEO_ID')) return; // placeholder
-
-    btn.addEventListener('click', () => {
-      // Crear iframe de YouTube
-      const iframe = document.createElement('iframe');
-      iframe.src = `https://www.youtube.com/embed/${ytId}?autoplay=1&rel=0`;
-      iframe.allow = 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture';
-      iframe.allowFullscreen = true;
-      iframe.loading = 'lazy';
-      iframe.title = 'Vídeo de ARIK';
-
-      // Reemplazar placeholder
-      const placeholder = $('.video-placeholder', thumb);
-      if (placeholder) placeholder.remove();
-      btn.remove();
-      thumb.appendChild(iframe);
-    });
-  });
-}
-
-/* ═══════════════════════════════════════════
-   10. Contact canvas — partículas sutiles
-   ═══════════════════════════════════════════ */
-function initContactCanvas() {
-  const canvas = $('#contactCanvas');
-  if (!canvas || prefersReducedMotion) return;
-
-  const ctx = canvas.getContext('2d');
-  let W, H, particles;
-  const PARTICLE_COUNT = 35;
+  const ctx  = canvas.getContext('2d');
+  const COLS = ['#7B2FFF', '#00D4FF', '#FF2D55', '#4a1d96'];
+  let W, H, particles, mouseX = -1000, mouseY = -1000;
+  const COUNT = 90;
 
   function resize() {
     W = canvas.width  = canvas.offsetWidth;
@@ -395,23 +149,46 @@ function initContactCanvas() {
 
   class Particle {
     constructor() { this.reset(true); }
-    reset(randomY = false) {
-      this.x    = Math.random() * W;
-      this.y    = randomY ? Math.random() * H : H + 10;
-      this.size = Math.random() * 1.5 + 0.5;
-      this.vy   = -(Math.random() * 0.4 + 0.15);
-      this.vx   = (Math.random() - 0.5) * 0.2;
-      this.alpha = Math.random() * 0.3 + 0.05;
+
+    reset(random = false) {
+      this.x    = random ? Math.random() * W : W * Math.random();
+      this.y    = random ? Math.random() * H : H + 10;
+      this.ox   = this.x; // posición original para spring
+      this.oy   = this.y;
+      this.vx   = (Math.random() - .5) * .4;
+      this.vy   = -(Math.random() * .5 + .2);
+      this.size = Math.random() * 2.5 + .5;
+      this.col  = COLS[Math.floor(Math.random() * COLS.length)];
+      this.alpha= Math.random() * .5 + .15;
+      this.life = Math.random();
     }
+
     update() {
+      // Repulsión del ratón
+      const dx  = this.x - mouseX;
+      const dy  = this.y - mouseY;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < 80) {
+        const force = (80 - dist) / 80;
+        this.x += (dx / dist) * force * 2;
+        this.y += (dy / dist) * force * 2;
+      }
+
       this.x += this.vx;
       this.y += this.vy;
-      if (this.y < -5) this.reset();
+      this.life -= .003;
+
+      if (this.life <= 0 || this.y < -10) {
+        this.x    = Math.random() * W;
+        this.y    = H + 10;
+        this.life = 1;
+      }
     }
+
     draw() {
       ctx.save();
-      ctx.globalAlpha = this.alpha;
-      ctx.fillStyle = '#e8183c';
+      ctx.globalAlpha = this.alpha * Math.min(this.life * 3, 1);
+      ctx.fillStyle = this.col;
       ctx.beginPath();
       ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
       ctx.fill();
@@ -421,188 +198,568 @@ function initContactCanvas() {
 
   function init() {
     resize();
-    particles = Array.from({ length: PARTICLE_COUNT }, () => new Particle());
+    particles = Array.from({ length: COUNT }, () => new Particle());
   }
 
+  let animId;
   function animate() {
     ctx.clearRect(0, 0, W, H);
     particles.forEach(p => { p.update(); p.draw(); });
-    requestAnimationFrame(animate);
+    animId = requestAnimationFrame(animate);
   }
 
-  window.addEventListener('resize', resize);
+  // Seguir el ratón sobre el hero
+  $('#inicio')?.addEventListener('mousemove', (e) => {
+    const rect = canvas.getBoundingClientRect();
+    mouseX = e.clientX - rect.left;
+    mouseY = e.clientY - rect.top;
+  });
+  $('#inicio')?.addEventListener('mouseleave', () => {
+    mouseX = -1000; mouseY = -1000;
+  });
+
+  window.addEventListener('resize', () => { resize(); });
+
   init();
   animate();
-}
 
-/* ═══════════════════════════════════════════
-   11. Contact form — tabs + submit
-   ═══════════════════════════════════════════ */
-function activateTab(type) {
-  $$('.form-tab').forEach(tab => {
-    const isActive = tab.dataset.formTab === type;
-    tab.classList.toggle('active', isActive);
-    tab.setAttribute('aria-selected', String(isActive));
-  });
-  const djFields   = $('#dj-fields');
-  const beatFields = $('#beat-fields');
-  if (djFields)   djFields.style.display   = type === 'dj'   ? 'flex' : 'none';
-  if (beatFields) beatFields.style.display = type === 'beat' ? 'flex' : 'none';
-}
-// Hacer global para que el HTML inline la use
-window.activateTab = activateTab;
-
-function initContactForm() {
-  const form = $('#contactForm');
-  const btn  = $('#submitBtn');
-  if (!form || !btn) return;
-
-  form.addEventListener('submit', (e) => {
-    e.preventDefault();
-
-    // Validación básica
-    const name  = $('#f-name').value.trim();
-    const email = $('#f-email').value.trim();
-    if (!name || !email) {
-      shakeField(!name ? '#f-name' : '#f-email');
-      return;
-    }
-
-    // Simular envío (reemplazar por fetch a tu backend/Formspree)
-    btn.disabled = true;
-    btn.querySelector('.btn-text').textContent = 'Enviando...';
-
-    setTimeout(() => {
-      btn.classList.add('sent');
-      btn.querySelector('.btn-text').textContent = '¡Mensaje enviado! ✓';
-      // Aquí conectarías con Formspree, EmailJS, etc.:
-      // fetch('https://formspree.io/f/TU_ID', { method: 'POST', body: new FormData(form) })
-      setTimeout(() => {
-        btn.disabled = false;
-        btn.classList.remove('sent');
-        btn.querySelector('.btn-text').textContent = 'Enviar mensaje';
-        form.reset();
-      }, 4000);
-    }, 1000);
-  });
-}
-
-function shakeField(selector) {
-  const el = $(selector);
-  if (!el || prefersReducedMotion) return;
-  gsap.fromTo(el,
-    { x: -6 },
-    { x: 0, duration: 0.4, ease: 'elastic.out(1, 0.3)',
-      keyframes: [{ x: -6 }, { x: 6 }, { x: -4 }, { x: 4 }, { x: 0 }]
-    }
-  );
-  el.focus();
-}
-
-/* ═══════════════════════════════════════════
-   12. Magnetic button effect
-   (solo en desktop y elementos [data-magnetic])
-   ═══════════════════════════════════════════ */
-function initMagnetic() {
-  if (isTouch || prefersReducedMotion) return;
-
-  $$('[data-magnetic]').forEach(el => {
-    el.addEventListener('mousemove', (e) => {
-      const rect     = el.getBoundingClientRect();
-      const cx       = rect.left + rect.width  / 2;
-      const cy       = rect.top  + rect.height / 2;
-      const dx       = (e.clientX - cx) * 0.3;
-      const dy       = (e.clientY - cy) * 0.3;
-      gsap.to(el, { x: dx, y: dy, duration: 0.4, ease: 'power2.out' });
+  // Parar animación si la sección sale del viewport (performance)
+  if (window.ScrollTrigger) {
+    ScrollTrigger.create({
+      trigger: '#inicio',
+      start: 'top top',
+      end: 'bottom top',
+      onLeave: () => { cancelAnimationFrame(animId); },
+      onEnterBack: () => { animate(); },
     });
-    el.addEventListener('mouseleave', () => {
-      gsap.to(el, { x: 0, y: 0, duration: 0.6, ease: 'elastic.out(1, 0.5)' });
-    });
-  });
+  }
 }
 
-/* ═══════════════════════════════════════════
-   13. Smooth scroll para links internos
-   ═══════════════════════════════════════════ */
-function initSmoothScroll() {
+
+/* ════════════════════════════════════════════════
+   04. NAVEGACIÓN
+   - Fondo al hacer scroll
+   - Link activo según sección visible
+   - Burger / menú móvil
+   ════════════════════════════════════════════════ */
+
+function initNav() {
+  const navWrap = $('#navWrap');
+  const burger  = $('#navBurger');
+  const mobileM = $('#mobileMenu');
+
+  // ── Scroll: añadir clase "scrolled" ──
+  if (navWrap && window.ScrollTrigger) {
+    ScrollTrigger.create({
+      start: '80px top',
+      onEnter:     () => navWrap.classList.add('scrolled'),
+      onLeaveBack: () => navWrap.classList.remove('scrolled'),
+    });
+  }
+
+  // ── Active link por sección visible ──
+  const sections = $$('main section[id]');
+  const navLinks  = $$('.nav-link');
+
+  if (window.ScrollTrigger) {
+    sections.forEach(section => {
+      ScrollTrigger.create({
+        trigger: section,
+        start: 'top 55%',
+        end:   'bottom 55%',
+        onEnter:      () => setActiveLink(section.id),
+        onEnterBack:  () => setActiveLink(section.id),
+      });
+    });
+  }
+
+  function setActiveLink(id) {
+    navLinks.forEach(l => {
+      l.classList.toggle('active', l.getAttribute('href') === `#${id}`);
+    });
+  }
+
+  // ── Burger / menú móvil ──
+  let menuOpen = false;
+
+  function toggleMenu(open) {
+    menuOpen = open ?? !menuOpen;
+    burger?.setAttribute('aria-expanded', String(menuOpen));
+    mobileM?.setAttribute('aria-hidden',   String(!menuOpen));
+    document.body.style.overflow = menuOpen ? 'hidden' : '';
+  }
+
+  burger?.addEventListener('click', () => toggleMenu());
+  $$('.mm-link', mobileM).forEach(link => {
+    link.addEventListener('click', () => toggleMenu(false));
+  });
+
+  // ── Smooth scroll para links internos ──
   $$('a[href^="#"]').forEach(link => {
     link.addEventListener('click', (e) => {
       const target = $(link.getAttribute('href'));
       if (!target) return;
       e.preventDefault();
-      const navH = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--nav-h'), 10) || 68;
-      const top  = target.getBoundingClientRect().top + window.scrollY - navH;
+      const navH = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--nav-h'), 10) || 70;
+      const top = target.getBoundingClientRect().top + window.scrollY - navH;
       window.scrollTo({ top, behavior: 'smooth' });
     });
   });
 }
 
-/* ═══════════════════════════════════════════
-   Boot — todo arranca aquí
-   ═══════════════════════════════════════════ */
-document.addEventListener('DOMContentLoaded', () => {
 
-  // Registrar ScrollTrigger si GSAP está disponible
-  if (window.gsap && window.ScrollTrigger) {
-    gsap.registerPlugin(ScrollTrigger);
+/* ════════════════════════════════════════════════
+   05. ENTRADA DEL HERO — GSAP timeline
+   Se llama desde initLoader() cuando el loader termina.
+   ════════════════════════════════════════════════ */
+
+function initHeroEntrance() {
+  if (!window.gsap) {
+    // Fallback sin GSAP: mostrar todo de golpe
+    $$('.hero-eyebrow, .ht-word, .ht-accent, .hero-sub, .hero-ctas, .hero-stats, .scroll-hint')
+      .forEach(el => { el.style.opacity = '1'; el.style.transform = 'none'; });
+    return;
   }
 
-  // Construir waveform antes de que se vea
-  buildWaveform();
-  pauseWaveform(); // pausar hasta que entre en viewport
+  if (noMotion) {
+    gsap.set(['.hero-eyebrow','.ht-word','.ht-accent','.hero-sub','.hero-ctas','.hero-stats','.scroll-hint'],
+      { opacity: 1, y: 0, x: 0 });
+    return;
+  }
 
-  // Inicializar todo
-  initLoader();        // 1. Loader (llama a heroEntrance cuando termina)
-  initCursor();        // 2. Cursor personalizado
-  initNav();           // 3. Nav scroll
-  initMobileMenu();    // 4. Mobile menu
-  // initHeroEntrance se llama desde initLoader
-  initScrollReveals(); // 6. Scroll reveals
-  initCounters();      // 7. Counters
-  initVideoCards();    // 9. Videos
-  initContactCanvas(); // 10. Canvas partículas
-  initContactForm();   // 11. Formulario
-  initMagnetic();      // 12. Magnetic
-  initSmoothScroll();  // 13. Smooth scroll
+  const tl = gsap.timeline({ defaults: { ease: 'power3.out' } });
 
-  // Activar tab DJ por defecto en el form
-  activateTab('dj');
+  tl
+    // 1. Eyebrow
+    .fromTo('.hero-eyebrow',
+      { opacity: 0, y: 16 },
+      { opacity: 1, y: 0, duration: .65 }
+    )
+    // 2. Título — cada palabra sube desde dentro del overflow:hidden
+    .fromTo('.ht-word',
+      { y: '110%', opacity: 0 },
+      { y: '0%', opacity: 1, duration: .9, stagger: .08 },
+      '-=.35'
+    )
+    .fromTo('.ht-accent',
+      { y: '110%', opacity: 0 },
+      { y: '0%', opacity: 1, duration: .7 },
+      '<.3'
+    )
+    // 3. Subtítulo
+    .fromTo('.hero-sub',
+      { opacity: 0, y: 20 },
+      { opacity: 1, y: 0, duration: .65 },
+      '-=.4'
+    )
+    // 4. CTAs
+    .fromTo('.hero-ctas',
+      { opacity: 0, y: 16 },
+      { opacity: 1, y: 0, duration: .6 },
+      '-=.4'
+    )
+    // 5. Stats
+    .fromTo('.hero-stats',
+      { opacity: 0, y: 14 },
+      { opacity: 1, y: 0, duration: .55 },
+      '-=.35'
+    )
+    // 6. Scroll hint
+    .fromTo('.scroll-hint',
+      { opacity: 0 },
+      { opacity: 1, duration: .5 },
+      '-=.2'
+    );
+}
+
+
+/* ════════════════════════════════════════════════
+   06. REVEALS CON SCROLL — GSAP ScrollTrigger
+   Clases: .js-reveal, .js-reveal-left, .js-reveal-right
+   Atributo: data-delay="0.1" (segundos de delay)
+   ════════════════════════════════════════════════ */
+
+function initScrollReveals() {
+  if (!window.gsap || !window.ScrollTrigger) return;
+
+  if (noMotion) {
+    $$('.js-reveal, .js-reveal-left, .js-reveal-right').forEach(el => {
+      el.style.opacity = '1';
+      el.style.transform = 'none';
+    });
+    return;
+  }
+
+  $$('.js-reveal, .js-reveal-left, .js-reveal-right').forEach(el => {
+    const delay = parseFloat(el.dataset.delay || 0);
+    const dir   = el.classList.contains('js-reveal-left')  ? 'left'
+                : el.classList.contains('js-reveal-right') ? 'right'
+                : 'up';
+
+    gsap.fromTo(el,
+      {
+        opacity: 0,
+        x: dir === 'left' ? -32 : dir === 'right' ? 32 : 0,
+        y: dir === 'up' ? 28 : 0,
+      },
+      {
+        opacity: 1, x: 0, y: 0,
+        duration: .75,
+        delay,
+        ease: 'power2.out',
+        scrollTrigger: {
+          trigger: el,
+          start: 'top 88%',
+          once: true,
+        }
+      }
+    );
+  });
+
+  // Parallax leve en el hero placeholder (si no hay vídeo)
+  gsap.to('.hero-placeholder', {
+    yPercent: 18,
+    ease: 'none',
+    scrollTrigger: {
+      trigger: '#inicio',
+      start: 'top top',
+      end:   'bottom top',
+      scrub: true,
+    }
+  });
+}
+
+
+/* ════════════════════════════════════════════════
+   07. CONTADORES ANIMADOS
+   Elementos: .hstat con data-count="N"
+   El número hijo .hstat-num se anima de 0 a N.
+   ════════════════════════════════════════════════ */
+
+function initCounters() {
+  if (!window.gsap || !window.ScrollTrigger) return;
+
+  $$('.hstat[data-count]').forEach(stat => {
+    const target = parseInt(stat.dataset.count, 10);
+    const numEl  = $('.hstat-num', stat);
+    if (!numEl) return;
+
+    ScrollTrigger.create({
+      trigger: stat,
+      start: 'top 85%',
+      once: true,
+      onEnter: () => {
+        if (noMotion) { numEl.textContent = target; return; }
+
+        gsap.to({ v: 0 }, {
+          v: target,
+          duration: 1.8,
+          ease: 'power2.out',
+          onUpdate: function () {
+            numEl.textContent = Math.round(this.targets()[0].v);
+          }
+        });
+      }
+    });
+  });
+}
+
+
+/* ════════════════════════════════════════════════
+   08. MUSIC TABS
+   Tabs de Tracks / Sets DJ / Releases
+   ════════════════════════════════════════════════ */
+
+function initMusicTabs() {
+  const tabs   = $$('.mtab');
+  const panels = $$('.music-panel');
+
+  tabs.forEach(tab => {
+    tab.addEventListener('click', () => {
+      const target = tab.dataset.tab;
+
+      // Actualizar tabs
+      tabs.forEach(t => { t.classList.remove('active'); t.setAttribute('aria-selected', 'false'); });
+      tab.classList.add('active');
+      tab.setAttribute('aria-selected', 'true');
+
+      // Mostrar panel correspondiente
+      panels.forEach(p => p.classList.remove('active'));
+      $(`#panel-${target}`)?.classList.add('active');
+
+      // Re-disparar reveals en el nuevo panel
+      if (window.ScrollTrigger) ScrollTrigger.refresh();
+    });
+  });
+}
+
+
+/* ════════════════════════════════════════════════
+   09. FORM TABS + FORMULARIO DE CONTACTO
+   ════════════════════════════════════════════════ */
+
+function initContactForm() {
+
+  // ── Tabs de motivo ──
+  const ftabs      = $$('.ftab');
+  const eventoFlds = $('#evento-fields');
+  const beatFlds   = $('#beat-fields');
+  const formTipo   = $('#formTipo');
+
+  ftabs.forEach(tab => {
+    tab.addEventListener('click', () => {
+      ftabs.forEach(t => { t.classList.remove('active'); t.setAttribute('aria-selected','false'); });
+      tab.classList.add('active');
+      tab.setAttribute('aria-selected','true');
+
+      const tipo = tab.dataset.ftab;
+      if (formTipo) formTipo.value = tipo;
+
+      if (eventoFlds) eventoFlds.style.display = tipo === 'evento' ? 'flex' : 'none';
+      if (beatFlds)   beatFlds.style.display   = tipo === 'beat'   ? 'flex' : 'none';
+    });
+  });
+
+  // ── Submit del formulario ──
+  const form      = $('#contactForm');
+  const submitBtn = $('#submitBtn');
+  const success   = $('#formSuccess');
+
+  if (!form) return;
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+
+    // Honeypot anti-spam
+    if (form.querySelector('[name="_honey"]')?.value) return;
+
+    // Validación básica
+    const nombre  = $('#f-name')?.value.trim();
+    const email   = $('#f-email')?.value.trim();
+    const mensaje = $('#f-msg')?.value.trim();
+
+    if (!nombre || !email || !mensaje) {
+      shakeInvalid(form);
+      return;
+    }
+    if (!isValidEmail(email)) {
+      shakeInvalid($('#f-email'));
+      return;
+    }
+
+    // Estado de carga
+    if (submitBtn) { submitBtn.disabled = true; $('.btn-text', submitBtn).textContent = 'Enviando...'; }
+
+    // ═══════════════════════════════════════════════════════════════
+    // BACKEND — elige UNA de estas opciones:
+    // ───────────────────────────────────────────────────────────────
+    //
+    // OPCIÓN A: Formspree (más sencillo, sin servidor propio)
+    // ───────────────────────────────────────────────────────────────
+    // 1. Crea cuenta en formspree.io
+    // 2. Crea un nuevo formulario
+    // 3. Cambia la URL de abajo por tu endpoint:
+    //
+    //   const res = await fetch('https://formspree.io/f/TU_FORM_ID', {
+    //     method: 'POST',
+    //     headers: { 'Accept': 'application/json' },
+    //     body: new FormData(form)
+    //   });
+    //   const ok = res.ok;
+    //
+    // ───────────────────────────────────────────────────────────────
+    // OPCIÓN B: Supabase
+    // ───────────────────────────────────────────────────────────────
+    // 1. Crea proyecto en supabase.com
+    // 2. Crea tabla: contact_requests
+    //    Columnas: id (uuid), nombre, email, mensaje, tipo, created_at
+    // 3. Obtén SUPABASE_URL y SUPABASE_ANON_KEY del dashboard
+    //
+    //   const SUPABASE_URL  = 'https://TU_ID.supabase.co';
+    //   const SUPABASE_KEY  = 'TU_ANON_KEY';
+    //
+    //   const res = await fetch(`${SUPABASE_URL}/rest/v1/contact_requests`, {
+    //     method: 'POST',
+    //     headers: {
+    //       'Content-Type': 'application/json',
+    //       'apikey': SUPABASE_KEY,
+    //       'Authorization': `Bearer ${SUPABASE_KEY}`,
+    //       'Prefer': 'return=minimal'
+    //     },
+    //     body: JSON.stringify({ nombre, email, mensaje,
+    //       tipo: formTipo?.value || 'evento' })
+    //   });
+    //   const ok = res.ok;
+    //
+    // ───────────────────────────────────────────────────────────────
+    // OPCIÓN C: Firebase Firestore
+    // ───────────────────────────────────────────────────────────────
+    // 1. Crea proyecto en firebase.google.com
+    // 2. Activa Firestore Database
+    // 3. Añade los scripts del SDK de Firebase en index.html
+    //    (antes de script.js):
+    //    <script src="https://www.gstatic.com/firebasejs/10.x.x/firebase-app-compat.js"></script>
+    //    <script src="https://www.gstatic.com/firebasejs/10.x.x/firebase-firestore-compat.js"></script>
+    // 4. Luego aquí:
+    //
+    //   firebase.initializeApp({ apiKey:'...', projectId:'...' });
+    //   const db = firebase.firestore();
+    //   await db.collection('contactos').add({
+    //     nombre, email, mensaje,
+    //     tipo: formTipo?.value,
+    //     timestamp: firebase.firestore.FieldValue.serverTimestamp()
+    //   });
+    //   const ok = true;
+    //
+    // ───────────────────────────────────────────────────────────────
+    // OPCIÓN D: API propia (Node/Express, PHP, Python, etc.)
+    // ───────────────────────────────────────────────────────────────
+    //   const res = await fetch('/api/contacto', {
+    //     method: 'POST',
+    //     headers: { 'Content-Type': 'application/json' },
+    //     body: JSON.stringify({ nombre, email, mensaje,
+    //       tipo: formTipo?.value })
+    //   });
+    //   const ok = res.ok;
+    //
+    // ═══════════════════════════════════════════════════════════════
+
+    // SIMULACIÓN (eliminar cuando tengas backend real):
+    await new Promise(r => setTimeout(r, 1200));
+    const ok = true;
+
+    if (ok) {
+      form.reset();
+      success?.removeAttribute('hidden');
+      if (submitBtn) { submitBtn.disabled = false; $('.btn-text', submitBtn).textContent = 'Enviar mensaje'; }
+      setTimeout(() => success?.setAttribute('hidden', ''), 6000);
+    } else {
+      if (submitBtn) { submitBtn.disabled = false; $('.btn-text', submitBtn).textContent = 'Reintentar'; }
+      alert('Hubo un error. Por favor escríbeme directamente a tu@email.com');
+    }
+  });
+}
+
+function isValidEmail(email) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+function shakeInvalid(el) {
+  if (!el || !window.gsap || noMotion) return;
+  gsap.fromTo(el,
+    { x: -6 },
+    { x: 0, duration: .5, ease: 'elastic.out(1, .3)',
+      keyframes: [{ x: -6 }, { x: 6 }, { x: -4 }, { x: 4 }, { x: 0 }]
+    }
+  );
+}
+
+
+/* ════════════════════════════════════════════════
+   10. PORTFOLIO — hover con overlay info
+   (El CSS ya maneja el hover, pero JS mejora
+    la accesibilidad con teclado)
+   ════════════════════════════════════════════════ */
+
+function initPortfolio() {
+  $$('.pf-card').forEach(card => {
+    // Activar efecto al recibir foco (teclado)
+    card.setAttribute('tabindex', '0');
+    card.addEventListener('focus',  () => card.classList.add('focused'));
+    card.addEventListener('blur',   () => card.classList.remove('focused'));
+  });
+}
+
+
+/* ════════════════════════════════════════════════
+   11. EFECTO MAGNETIC en botones [data-hover]
+   Solo en desktop. Atrae el botón hacia el cursor.
+   ════════════════════════════════════════════════ */
+
+function initMagnetic() {
+  if (isTouch || !window.gsap || noMotion) return;
+
+  $$('[data-hover]').forEach(btn => {
+    btn.addEventListener('mousemove', (e) => {
+      const rect = btn.getBoundingClientRect();
+      const cx   = rect.left + rect.width  / 2;
+      const cy   = rect.top  + rect.height / 2;
+      const dx   = (e.clientX - cx) * .28;
+      const dy   = (e.clientY - cy) * .28;
+      gsap.to(btn, { x: dx, y: dy, duration: .4, ease: 'power2.out' });
+    });
+
+    btn.addEventListener('mouseleave', () => {
+      gsap.to(btn, { x: 0, y: 0, duration: .7, ease: 'elastic.out(1, .5)' });
+    });
+  });
+}
+
+
+/* ════════════════════════════════════════════════
+   ARRANQUE — todo se inicializa aquí
+   ════════════════════════════════════════════════ */
+
+document.addEventListener('DOMContentLoaded', () => {
+
+  initLoader();        // 01 — Loader (llama a heroEntrance al terminar)
+  initCursor();        // 02 — Cursor
+  initHeroCanvas();    // 03 — Canvas fondo hero
+  initNav();           // 04 — Navegación
+  // 05 heroEntrance se llama desde initLoader()
+  initScrollReveals(); // 06 — Reveals scroll
+  initCounters();      // 07 — Contadores
+  initMusicTabs();     // 08 — Music tabs
+  initContactForm();   // 09 — Formulario
+  initPortfolio();     // 10 — Portfolio
+  initMagnetic();      // 11 — Magnetic buttons
+
 });
 
-/* ═══════════════════════════════════════════
-   NOTAS PARA PERSONALIZAR
-   ═══════════════════════════════════════════
 
-   Vídeo hero:
-   → Descomenta las líneas <source> en index.html
-   → Usa un clip de 10–20s, 1280×720, <15MB
-   → ffmpeg -i input.mp4 -vf scale=1280:-2 -c:v libx264 -crf 28 -an hero-bg.mp4
+/* ════════════════════════════════════════════════
+   GUÍA DE PERSONALIZACIÓN RÁPIDA
+   ════════════════════════════════════════════════
 
-   Fotos:
-   → about-img-placeholder → <img src="foto.jpg" class="about-img">
-   → show-placeholder      → <img src="show1.jpg" class="show-img">
-   → studio img            → añade <img src="estudio.jpg" class="studio-img"> en .prod-visual
+   📁 ESTRUCTURA DE ARCHIVOS RECOMENDADA:
+   ───────────────────────────────────────
+   /
+   ├── index.html
+   ├── styles.css
+   ├── script.js
+   ├── img/
+   │   ├── arik-foto.jpg          ← Foto "Sobre mí"
+   │   ├── hero-poster.jpg        ← Imagen de fondo del hero
+   │   ├── portfolio/
+   │   │   ├── evento-1.jpg
+   │   │   ├── evento-2.jpg
+   │   │   └── ...
+   │   └── releases/
+   │       ├── cover-modo-oscuro.jpg
+   │       └── ...
+   ├── video/
+   │   ├── hero-loop.mp4          ← Vídeo hero (< 15MB, sin audio)
+   │   └── hero-loop.webm
+   └── music/
+       └── (no se sirven archivos de audio aquí, usa embed)
 
-   Videos YouTube:
-   → data-yt-id en cada .video-thumb → el ID de youtube.com/watch?v=ESTE_ID
+   ───────────────────────────────────────
+   ✅ CHECKLIST PARA LANZAR:
+   ───────────────────────────────────────
+   □ Cambiar "ARIK DJ" por nombre real si es diferente
+   □ Actualizar número de WhatsApp en el botón FAB y en #contacto
+   □ Actualizar email en .cm-item
+   □ Añadir foto real en #sobre-mi (reemplazar placeholder)
+   □ Añadir foto/vídeo hero (descomentar <video> en index.html)
+   □ Pegar embed de Spotify (sección #musica, panel tracks)
+   □ Pegar embed de SoundCloud
+   □ Añadir IDs de YouTube a los set-card y video-card
+   □ Añadir fotos reales al portfolio (pf-placeholder → <img>)
+   □ Conectar formulario a backend (Opción A/B/C/D arriba)
+   □ Actualizar links de redes sociales (busca href="#")
+   □ Actualizar fechas de disponibilidad en .ca-dates
+   □ Añadir testimonios reales
+   □ Cambiar "Barcelona" si es otra ciudad
+   □ Añadir meta og:image con una captura de pantalla de la web
 
-   Spotify:
-   → Ve a tu perfil → Share → Embed → copia el src del iframe
-   → Pégalo en el iframe.spotify-embed
-
-   SoundCloud:
-   → Ve a tu perfil → Share → Embed → copia el src
-   → Pégalo en el iframe.sc-embed
-
-   Formulario:
-   → En initContactForm(), reemplaza el setTimeout por:
-   fetch('https://formspree.io/f/TU_FORM_ID', {
-     method: 'POST',
-     headers: { 'Accept': 'application/json' },
-     body: new FormData(form)
-   })
-
-   Redes sociales:
-   → Busca class="cs-link" en index.html → añade href reales
-
-   ═══════════════════════════════════════════ */
+   ════════════════════════════════════════════════ */
